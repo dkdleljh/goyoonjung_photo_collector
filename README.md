@@ -117,6 +117,47 @@ cp .env.example .env
 
 ## 5. 실행 방법
 
+### 5.0 실제 실행 예시(출력 샘플)
+
+드라이런 예시(다운로드/저장 없이 후보 수집만 점검):
+
+```bash
+python -m app.cli run --once --dry-run --providers "wikimedia" --keywords "Go Yoon-jung"
+```
+
+출력 예시(요약):
+
+```text
+[Collector] Starting batch...
+--- Batch Summary [YYYY-MM-DDTHH:MM:SS+09:00] ---
+dry_run: True
+providers: wikimedia
+candidates_total: 65
+unique_urls: 40
+OK: 0
+DUPLICATE: 0
+DOWNLOAD_FAIL: 0
+...
+[Collector] Batch finished with exit=0.
+```
+
+상태 확인 예시:
+
+```bash
+python -m app.cli status
+```
+
+```text
+last_run_kst: YYYY-MM-DDTHH:MM:SS.ssssss+09:00
+last_ok_count: 0
+last_exit_code: 0
+failures_by_reason:
+  (있으면 출력됨)
+```
+
+> `--dry-run`은 OK가 0이어도 정상입니다(저장 자체를 안 하므로).
+
+
 ### 5.1 1회 실행(run --once)
 
 기본 실행:
