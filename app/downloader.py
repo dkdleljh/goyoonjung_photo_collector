@@ -57,17 +57,23 @@ def _guess_extension(url: str, content_type: str | None, data: bytes, img_format
     return ".img"
 
 
-def _is_720p_or_above(width: int, height: int) -> bool:
-    min_side = 300
-    return width >= min_side or height >= min_side
+def is_quality_ok(width: int, height: int, *, min_short_side_px: int) -> bool:
+    """Quality gate.
+
+    We require min(width, height) >= min_short_side_px.
+    Default is 720 ("720p"-class). This matches the README and prevents low-res spam.
+    """
+
+    return min(width, height) >= int(min_short_side_px)
 
 
 class ImageDownloader:
-    def __init__(self, root: Path, dedup_store, items_logger, failed_logger) -> None:
+    def __init__(self, root: Path, dedup_store, items_logger, failed_logger, *, min_short_side_px: int = 720) -> None:
         self.root = root
         self.dedup_store = dedup_store
         self.items_logger = items_logger
         self.failed_logger = failed_logger
+        self.min_short_side_px = int(min_short_side_px)
 
     async def process_candidates(
         self,
@@ -160,7 +166,7 @@ class ImageDownloader:
             )
             return "IMAGE_DECODE_FAIL"
 
-        if not _is_720p_or_above(width, height):
+        if not is_quality_ok(width, height, min_short_side_px=self.min_short_side_px):
             self.failed_logger.append(
                 {
                     "time_kst": time_kst,
@@ -168,7 +174,7 @@ class ImageDownloader:
                     "url": cand.url,
                     "source_url": cand.source_url,
                     "reason": "RESOLUTION_TOO_SMALL",
-                    "detail": f"{width}x{height}",
+                    "detail": f"{width}x{height} (min_short_side_px={self.min_short_side_px})",
                 }
             )
             return "RESOLUTION_TOO_SMALL"
@@ -198,18 +204,11 @@ class ImageDownloader:
         save_path.write_bytes(data)
         self.dedup_store.add(sha256_hex, time_kst)
 
-        if width >= 3000 or len(data) >= 2 * 1024 * 1024:
-            self._save_copy(data, filename, "Organized/Best_Cuts")
+        # Organized copies (classification shared with reorganize.py)
+        from app.organize import classify
 
-        if max(width, height) >= 1920:
-            if height > width:
-                self._save_copy(data, filename, "Organized/Mobile_Wallpapers")
-            else:
-                self._save_copy(data, filename, "Organized/Desktop_Wallpapers")
-        elif max(width, height) >= 1000:
-            self._save_copy(data, filename, "Organized/General_HQ")
-        else:
-            self._save_copy(data, filename, "Organized/Archive_LowRes")
+        for subpath in classify(width, height, len(data)):
+            self._save_copy(data, filename, subpath)
 
         self.items_logger.append(
             {

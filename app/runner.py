@@ -142,6 +142,13 @@ def _status_path(root: Path) -> Path:
 
 
 def _write_status(root: Path, report: RunReport, exit_code: int) -> None:
+    prev = read_status() or {}
+    prev_err = int(prev.get("consecutive_error", 0) or 0)
+    prev_deg = int(prev.get("consecutive_degraded", 0) or 0)
+
+    consecutive_error = prev_err + 1 if exit_code == EXIT_ERROR else 0
+    consecutive_degraded = prev_deg + 1 if exit_code == EXIT_DEGRADED else 0
+
     payload = {
         "last_run_kst": report.run_ts,
         "last_ok_count": report.ok_count,
@@ -152,6 +159,9 @@ def _write_status(root: Path, report: RunReport, exit_code: int) -> None:
         "unique_urls": report.unique_urls,
         "counts": dict(report.counts),
         "failures_by_reason": report.failures_by_reason,
+        "consecutive_error": consecutive_error,
+        "consecutive_degraded": consecutive_degraded,
+        "min_short_side_px": report.counts.get("_min_short_side_px") or None,
     }
     _status_path(root).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -181,15 +191,22 @@ async def run_once(config: RunConfig, project_root: Path) -> RunReport:
     candidates: list[Candidate] = []
 
     async with httpx.AsyncClient(timeout=25.0, headers=DEFAULT_HEADERS) as client:
+        # Collect providers concurrently (isolation keeps failures local)
+        tasks = []
         for provider_name, provider in _build_provider_tasks(config, project_root):
-            provider_candidates = await _collect_with_isolation(
-                provider_name,
-                provider,
-                client=client,
-                config=config,
-                failed_logger=failed_logger,
-                run_ts=run_ts,
+            tasks.append(
+                _collect_with_isolation(
+                    provider_name,
+                    provider,
+                    client=client,
+                    config=config,
+                    failed_logger=failed_logger,
+                    run_ts=run_ts,
+                )
             )
+
+        results = await asyncio.gather(*tasks)
+        for provider_candidates in results:
             candidates.extend(provider_candidates)
 
         candidate_total = len(candidates)
@@ -211,6 +228,7 @@ async def run_once(config: RunConfig, project_root: Path) -> RunReport:
                 dedup_store=dedup_store,
                 items_logger=items_logger,
                 failed_logger=failed_logger,
+                min_short_side_px=config.min_short_side_px,
             )
             counts, provider_ok = await downloader.process_candidates(
                 client,
@@ -219,6 +237,9 @@ async def run_once(config: RunConfig, project_root: Path) -> RunReport:
             )
 
     dedup_store.close()
+
+    # Attach config into counts for status/debug (kept simple & backward compatible)
+    counts["_min_short_side_px"] = int(config.min_short_side_px)
 
     required = [
         "OK",
@@ -284,6 +305,20 @@ def run_sync(config: RunConfig, project_root: Path) -> int:
             _write_status(root, report, exit_code)
         except OSError as exc:
             print(f"[Collector] Warning: failed to write status: {exc}")
+
+        # Best-effort notify on repeated degraded/error runs (unmanned ops)
+        try:
+            from app.notify import notify
+
+            if exit_code == EXIT_ERROR:
+                notify(f"[PhotoCollector] ERROR (exit=2) at {report.run_ts}")
+            elif exit_code == EXIT_DEGRADED:
+                st = read_status() or {}
+                if int(st.get("consecutive_degraded", 0) or 0) >= 3:
+                    notify(f"[PhotoCollector] DEGRADED x{st.get('consecutive_degraded')} (no meaningful candidates)\nlast_run={report.run_ts}")
+        except Exception:
+            pass
+
         print(f"[Collector] Batch finished with exit={exit_code}.")
         return exit_code
     except Exception as exc:  # noqa: BLE001

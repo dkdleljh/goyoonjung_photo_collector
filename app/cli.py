@@ -19,7 +19,7 @@ def _parse_csv(value: str) -> list[str]:
 def run(
     providers: str = typer.Option(
         ",".join(DEFAULT_PROVIDERS),
-        help='사용할 provider 목록. 기본: "naver,wikimedia,instagram_seed,google"',
+        help='사용할 provider 목록. 기본: "naver,wikimedia,instagram_seed" (google 등은 experimental)',
     ),
     keywords: str = typer.Option(
         "",

@@ -252,7 +252,21 @@ https://www.instagram.com/p/xxxxxxxxxxx/
 https://instagram.fxxx-xx.fna.fbcdn.net/v/t51.2885-15/....jpg
 ```
 
-### 6.2 RSSHub(선택)
+### 6.2 알림(선택, 무인 운영용)
+
+무인 운영에서 3회 연속 `DEGRADED(1)` 또는 `ERROR(2)`가 발생하면(내부 정책) 알림을 보낼 수 있습니다.
+
+환경변수 중 하나를 설정하세요:
+
+- 텔레그램:
+  - `TELEGRAM_BOT_TOKEN`
+  - `TELEGRAM_CHAT_ID`
+- 범용 웹훅:
+  - `NOTIFY_WEBHOOK_URL`
+
+> 설정하지 않으면 아무 동작도 하지 않습니다(no-op).
+
+### 6.3 RSSHub(선택)
 
 `docker-compose.rsshub.yml`은 RSSHub 기반 수집을 실험할 때 사용합니다.
 
@@ -300,7 +314,7 @@ Desktop/Goyoonjung_Photos/
 - 요청 간 딜레이: **0.8~1.6초 랜덤**(polite)
 - 재시도: 기본 3회(백오프)
 - 이미지 판별: HTTP `Content-Type`이 `image/*` 인지 확인
-- 해상도 필터: 최소 한 변 **300px 이상**
+- 해상도 필터(품질 게이트): **min(width,height) >= 720px** (기본값, `min_short_side_px`)
 - 중복 판별: `sha256(image_bytes)`
 - 저장 방식: 다운로드 바이트 그대로 저장(변환/재인코딩 없음)
 
