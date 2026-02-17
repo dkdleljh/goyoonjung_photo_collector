@@ -1,0 +1,3 @@
+# Instagram 게시물 URL을 한 줄에 하나씩 입력하세요.
+# 예시:
+# https://www.instagram.com/p/xxxxxxxxxxx/

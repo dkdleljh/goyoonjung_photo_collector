@@ -1,0 +1,18 @@
+services:
+  rsshub:
+    image: diygod/rsshub:latest
+    container_name: rsshub
+    restart: unless-stopped
+    ports:
+      - "1200:1200"
+    environment:
+      # Set these in an .env file next to this compose file (recommended)
+      # TWITTER_USERNAME=
+      # TWITTER_PASSWORD=
+      # TWITTER_AUTH_TOKEN=
+      # TWITTER_CT0=
+      # (See RSSHub docs for Twitter route requirements)
+      - NODE_ENV=production
+    # If you prefer .env file, uncomment:
+    # env_file:
+    #   - ./.rsshub.env

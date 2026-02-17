@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Virtualenvs
+venv/
+.venv/
+
+# Runtime state / locks
+.run_loop.lock
+
+# Local smoke root
+.smoke_photo_root/
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Scratch
+.codex_prompt.txt
