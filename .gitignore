@@ -7,6 +7,7 @@ venv/
 
 # Runtime state / locks
 .run_loop.lock
+.auto_publish.lock
 
 # Local smoke root
 .smoke_photo_root/
