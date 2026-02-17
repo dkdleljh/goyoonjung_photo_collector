@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-push secret scan (full repo)
+ROOT="$(git rev-parse --show-toplevel)"
+"$ROOT/scripts/secret_scan.sh" full

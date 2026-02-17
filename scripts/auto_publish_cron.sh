@@ -91,8 +91,8 @@ for b in "${BLOCKED[@]}"; do
   fi
 done
 
-if git diff --cached | grep -E -i "(gho_|github_pat_|xoxb-|xoxp-|AIza|sk-[A-Za-z0-9]{20,}|-----BEGIN (RSA|OPENSSH|EC) PRIVATE KEY-----|TELEGRAM_BOT_TOKEN|NAVER_CLIENT_SECRET)" >/dev/null; then
-  log "possible secret pattern in staged diff"; git reset -q; exit 1
+if ! "$ROOT/scripts/secret_scan.sh" staged >> "$LOG_FILE" 2>&1; then
+  log "secret scan failed"; git reset -q; exit 1
 fi
 
 # Run tests

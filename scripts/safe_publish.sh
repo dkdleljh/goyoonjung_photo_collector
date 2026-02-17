@@ -57,11 +57,8 @@ for b in "${BLOCKED[@]}"; do
   fi
 done
 
-# Naive token scan (best-effort). This is NOT a replacement for real secret scanning.
-# We scan staged diff only.
-if git diff --cached | grep -E -i "(gho_|github_pat_|xoxb-|xoxp-|AIza|sk-[A-Za-z0-9]{20,}|-----BEGIN (RSA|OPENSSH|EC) PRIVATE KEY-----|TELEGRAM_BOT_TOKEN|NAVER_CLIENT_SECRET)" >/dev/null; then
-  fail "possible secret pattern found in staged diff. inspect with: git diff --cached"
-fi
+# Secret scan (gitleaks/git-secrets) on staged diff
+"$ROOT/scripts/secret_scan.sh" staged
 
 # 3) Tests
 if [[ -x "./venv/bin/python" ]]; then

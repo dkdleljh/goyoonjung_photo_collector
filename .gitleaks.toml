@@ -1,0 +1,17 @@
+title = "goyoonjung_photo_collector"
+
+# Keep defaults but add a few project-specific allowlists.
+# NOTE: Avoid broad allowlists.
+
+[allowlist]
+description = "Allowlist for false positives"
+paths = [
+  # Example env template is allowed
+  '''^\.env\.example$''',
+  # Docs
+  '''^README\.md$''',
+  '''^사용설명서\.md$''',
+]
+
+# You can add allowlisted regexes here if needed, but keep it minimal.
+regexes = []

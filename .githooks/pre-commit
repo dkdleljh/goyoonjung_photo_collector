@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-commit secret scan (staged diff)
+ROOT="$(git rev-parse --show-toplevel)"
+"$ROOT/scripts/secret_scan.sh" staged
