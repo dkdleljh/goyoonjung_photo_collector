@@ -1,163 +1,317 @@
-# Goyoonjung Photo Collector (무료 API 기반)
+# goyoonjung_photo_collector
 
-배우 고윤정 사진을 무료 소스에서 수집하는 Python CLI 프로젝트입니다.
+무료로 접근 가능한 공개 소스(검색/오픈 데이터/seed URL 등)에서 **배우 고윤정** 관련 이미지를 수집해 로컬에 저장하는 Python CLI/배치 수집기입니다.
 
-- 유료 API/유료 서비스 미사용
-- Instagram 계정 전체 스크래핑 금지, seed URL만 처리
-- 720p 이상만 저장
-- 원본 바이트 그대로 저장(리사이즈/재인코딩/포맷변환 금지)
-- SHA-256 + SQLite 기반 중복 제거
-- 실행 요약 콘솔 출력 + 파일 저장
+- 유료 API/유료 서비스 **미사용**
+- 수집 결과는 **로컬 파일로만 저장**(S3/DB 업로드 같은 자동 외부 전송 없음)
+- 원본 바이트를 **그대로 저장**(리사이즈/재인코딩/포맷 변환 없음)
+- **중복 제거(sha256 + SQLite)**
+- 실패/스킵 사유를 JSONL로 남겨서 **재현/디버깅 가능**
 
-## 1) 요구 환경
+> 이 프로젝트는 “공개적으로 접근 가능한 리소스”만을 대상으로 합니다.
+> 로그인 우회, 차단 우회, 비공개 콘텐츠 접근을 목표로 하지 않습니다.
 
-- Python 3.11+
-- 지원 OS: Windows, macOS, Linux (ChromeOS 제외)
+---
 
-## 2) 설치
+## 목차
+
+- [1. 빠른 시작(Quickstart)](#1-빠른-시작quickstart)
+- [2. 요구사항](#2-요구사항)
+- [3. 설치](#3-설치)
+- [4. 설정(.env)](#4-설정env)
+- [5. 실행 방법](#5-실행-방법)
+  - [5.1 1회 실행(run --once)](#51-1회-실행run---once)
+  - [5.2 상태 확인(status)](#52-상태-확인status)
+  - [5.3 주기 실행(run_loop.py)](#53-주기-실행run_looppy)
+- [6. Providers(수집 소스)](#6-providers수집-소스)
+- [7. 저장 구조](#7-저장-구조)
+- [8. 필터/정책](#8-필터정책)
+- [9. 종료 코드(Exit code)](#9-종료-코드exit-code)
+- [10. 트러블슈팅](#10-트러블슈팅)
+- [11. 보안 체크리스트(중요)](#11-보안-체크리스트중요)
+
+---
+
+## 1. 빠른 시작(Quickstart)
 
 ```bash
-cd /home/zenith/goyoonjung_photo_collector
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+# 1) 클론
+git clone https://github.com/dkdleljh/goyoonjung_photo_collector.git
+cd goyoonjung_photo_collector
+
+# 2) 가상환경(프로젝트는 venv/를 기본으로 사용)
+python3 -m venv venv
+source venv/bin/activate
+
+# 3) 의존성 설치
+pip install -r requirements.txt
+
+# 4) 환경변수 파일 준비
+cp .env.example .env
+# .env를 열어 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET / PHOTO_ROOT 등을 세팅
+
+# 5) 1회 실행
+python -m app.cli run --once
+
+# 6) 상태 확인
+python -m app.cli status
+```
+
+---
+
+## 2. 요구사항
+
+- Python **3.11+**
+- OS: Linux / macOS / Windows
+
+---
+
+## 3. 설치
+
+### 3.1 가상환경 생성(권장)
+
+이 저장소는 `run_loop.py`에서 기본 파이썬 경로로 `./venv/bin/python`을 사용합니다.
+따라서 가상환경 폴더 이름을 **venv/** 로 맞추는 것을 권장합니다.
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 3) 환경변수 설정
+Windows:
 
-`.env.example`를 복사해 `.env`를 만든 뒤 값 입력:
+```powershell
+py -3.11 -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+---
+
+## 4. 설정(.env)
+
+`.env.example`를 복사해서 `.env`를 만들고 값을 채우세요.
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` 항목:
+### 4.1 .env 항목
 
-- `NAVER_CLIENT_ID` : NAVER 이미지 검색 Open API ID
-- `NAVER_CLIENT_SECRET` : NAVER 이미지 검색 Open API SECRET
-- `PHOTO_ROOT` (선택): 자동 Desktop 탐지가 어려운 환경에서 "Desktop처럼 간주할 경로"
+- `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET`
+  - 네이버 이미지 검색 Open API 사용 시 필요
+- `PHOTO_ROOT` (선택)
+  - “바탕화면(Desktop)” 자동 탐지가 어려운 환경에서 저장 루트를 강제로 지정
+
+### 4.2 저장 루트 규칙
 
 저장 루트는 항상 다음 규칙을 따릅니다.
 
 - 기본: `Desktop/Goyoonjung_Photos`
-- `PHOTO_ROOT` 지정 시: `PHOTO_ROOT/Goyoonjung_Photos`
+- `PHOTO_ROOT` 지정 시: `${PHOTO_ROOT}/Goyoonjung_Photos`
 
-즉 바탕화면(또는 PHOTO_ROOT로 지정한 Desktop 대체 경로) 최상위에는 `Goyoonjung_Photos` 폴더 하나만 생성/사용합니다.
+즉 `Desktop`(또는 `PHOTO_ROOT`) 아래에 `Goyoonjung_Photos` 폴더 하나만 생성/사용합니다.
 
-## 4) 실행
+---
+
+## 5. 실행 방법
+
+### 5.1 1회 실행(run --once)
 
 기본 실행:
 
 ```bash
-python -m app.cli run
+python -m app.cli run --once
 ```
 
-옵션 사용:
+Providers/키워드 지정:
 
 ```bash
-python -m app.cli run --providers "naver,wikimedia,instagram_seed" --keywords "고윤정,Go Yoon-jung"
+python -m app.cli run --once \
+  --providers "naver,wikimedia,instagram_seed,google" \
+  --keywords "고윤정,Go Yoon-jung,고윤정 화보"
 ```
 
-- `--providers` 기본값(권장): `naver,wikimedia,instagram_seed,google`
-- `twitter_rss`는 기본 비활성(실험적): 실패율이 높아 필요 시에만 직접 활성화
-  - 재활성화 예시: `python -m app.cli run --providers "naver,wikimedia,instagram_seed,google,twitter_rss"`
-- `--keywords` 미입력 시 기본 추천 키워드 자동 사용:
-  - 고윤정
-  - 고윤정 화보
-  - 고윤정 프로필
-  - 고윤정 인터뷰
-  - Go Yoon-jung
-  - Go Yoon-jung photoshoot
-  - Go Yoon-jung profile
-- `--dry-run`: 다운로드/저장 없이 후보 수집만 점검
-- 상태 확인: `python -m app.cli status`
+드라이런(다운로드/저장 없이 후보 수집만 점검):
 
-## 5) Instagram Seed 사용법
+```bash
+python -m app.cli run --once --dry-run
+```
 
-`seeds/instagram_urls.txt` 파일에 URL을 한 줄씩 입력합니다.
+### 5.2 상태 확인(status)
 
-```txt
+```bash
+python -m app.cli status
+```
+
+`PHOTO_ROOT/.../meta/status.json`(내부 구현) 기반으로 최근 실행 결과를 보여줍니다.
+
+### 5.3 주기 실행(run_loop.py)
+
+`run_loop.py`는 다음을 수행하는 “서비스형 루프”입니다.
+
+- 실행 전 **smoke test** 수행(빠른 사전 점검)
+- `python -m app.cli run --once` 실행
+- (성공 시) `reorganize.py` 실행(정리)
+- 설정된 시간(기본 4시간) sleep 후 반복
+
+1회만 돌리고 종료:
+
+```bash
+python run_loop.py --once
+```
+
+주기 실행(기본 4시간):
+
+```bash
+python run_loop.py
+```
+
+옵션 예시:
+
+```bash
+python run_loop.py \
+  --interval-hours 6 \
+  --providers "naver,wikimedia,instagram_seed" \
+  --keywords "고윤정,Go Yoon-jung" \
+  --timeout-seconds 3600
+```
+
+---
+
+## 6. Providers(수집 소스)
+
+프로바이더는 `--providers`로 콤마 구분 문자열로 지정합니다.
+
+기본 권장 조합 예시:
+
+- `naver` (API 키 필요)
+- `wikimedia` (키 불필요)
+- `instagram_seed` (키 불필요, seed URL만)
+- `google` (키 불필요, 공개 RSS/HTML 기반 best-effort)
+
+실험적/환경 의존:
+
+- `twitter_rss`, `twitter_rsshub`, `twitter_snscrape`
+  - 실패율이 높거나, 추가 구성(RSSHub/docker 등)이 필요할 수 있어 기본 비권장
+
+### 6.1 Instagram Seed 사용법
+
+`seeds/instagram_urls.txt`에 URL을 한 줄에 하나씩 넣습니다.
+
+- 이미지 직링크면 그대로 후보로 사용
+- 게시물 URL이면 HTML에서 `og:image` 추출을 시도
+- 로그인 필요/차단/`og:image` 없음이면 스킵하고 `meta/failed.jsonl`에 사유 기록
+
+예시:
+
+```text
 https://www.instagram.com/p/xxxxxxxxxxx/
 https://instagram.fxxx-xx.fna.fbcdn.net/v/t51.2885-15/....jpg
 ```
 
-동작 규칙:
+### 6.2 RSSHub(선택)
 
-- 직접 이미지 URL이면 바로 후보로 사용
-- 게시물 URL이면 HTML에서 `og:image`를 추출 시도
-- 로그인 필요/차단/og:image 없음이면 스킵하고 `meta/failed.jsonl`에 사유 기록
+`docker-compose.rsshub.yml`은 RSSHub 기반 수집을 실험할 때 사용합니다.
 
-## 6) 저장 구조
+> 운영 환경에 따라 RSSHub는 외부 서비스에 부하를 줄 수 있으니 사용 시 주의하세요.
 
-실행 후 저장 구조 예시:
+---
+
+## 7. 저장 구조
+
+실행 후 예시:
 
 ```text
 Desktop/Goyoonjung_Photos/
-  2026-02-08/
+  2026-02-17/
     naver/
     wikimedia/
     instagram_seed/
+    google/
+  Organized/
+    Best_Cuts/
+    Desktop_Wallpapers/
+    Mobile_Wallpapers/
+    General_HQ/
+    Archive_LowRes/
   meta/
     items.jsonl
     failed.jsonl
     dedup.sqlite
+    status.json
   logs/
-    summary_2026-02-08.txt
+    summary_2026-02-17.txt
 ```
 
-- 날짜/제공자 하위 폴더에 원본 파일 저장
-- `meta/items.jsonl`: 성공 메타데이터
-- `meta/failed.jsonl`: 실패/스킵 + 사유
-- `meta/dedup.sqlite`: SHA-256 중복 DB
+- 날짜/프로바이더 하위 폴더: 원본 파일 저장
+- `meta/items.jsonl`: 성공 메타데이터(저장 경로, 해상도, sha256 등)
+- `meta/failed.jsonl`: 실패/스킵 + 사유(DOWNLOAD_FAIL, NOT_IMAGE 등)
+- `meta/dedup.sqlite`: sha256 중복 제거 DB
 - `logs/summary_YYYY-MM-DD.txt`: 실행 요약
+- `Organized/*`: 해상도/용량 기준으로 “복사본”을 분류 저장(원본은 날짜 폴더에 유지)
 
-## 7) 품질/필터 규칙
+---
 
-- 동시성: 4 workers
-- 재시도: 3회 (지수 백오프)
-- polite delay: 요청 간 0.8~1.6초 랜덤
-- 이미지 판별: `Content-Type`이 `image/*`인지 확인
-- 해상도 필터: 최소 한 변 `300px` 이상
+## 8. 필터/정책
+
+- 요청 간 딜레이: **0.8~1.6초 랜덤**(polite)
+- 재시도: 기본 3회(백오프)
+- 이미지 판별: HTTP `Content-Type`이 `image/*` 인지 확인
+- 해상도 필터: 최소 한 변 **300px 이상**
 - 중복 판별: `sha256(image_bytes)`
-- 저장 방식: 다운로드 바이트 그대로 저장 (변환/재인코딩 없음)
+- 저장 방식: 다운로드 바이트 그대로 저장(변환/재인코딩 없음)
 
-## 8) 요약 출력 항목
+---
 
-매 실행 종료 시 다음 항목을 콘솔 및 summary 파일에 기록합니다.
+## 9. 종료 코드(Exit code)
 
-- `candidates_total`
-- `unique_urls`
-- `OK`
-- `RESOLUTION_TOO_SMALL`
-- `DUPLICATE`
-- `NOT_IMAGE`
-- `IMAGE_DECODE_FAIL`
-- `DOWNLOAD_FAIL`
-- provider별 `OK` 건수
-- `failures_by_reason` (사유별 실패 건수)
+`app.runner` 정책:
 
-## 9) 스케줄러 등록 (매일 19:00, KST 기준)
+- `0 (EXIT_OK)`
+  - 신규 저장(OK)이 있거나,
+  - 새로 발견한 URL이 있었지만 전부 DUPLICATE/필터로 처리된 경우(정상 동작)
+- `1 (EXIT_DEGRADED)`
+  - 실행은 됐지만 “의미 있는 후보가 전혀 없음”(예: 후보 0)
+- `2 (EXIT_ERROR)`
+  - 예외 등으로 실행 자체가 실패
 
-### Windows Task Scheduler
+> 무인 주기 실행에서는 **EXIT_DEGRADED(1)** 도 “정상적인 상황”일 수 있습니다.
 
-1. 작업 스케줄러 열기 → 작업 만들기
-2. 트리거: 매일, `19:00`
-3. 동작:
-   - 프로그램/스크립트: `C:\\path\\to\\project\\.venv\\Scripts\\python.exe`
-   - 인수 추가: `-m app.cli run`
-   - 시작 위치(Start in): `C:\\path\\to\\goyoonjung_photo_collector`
+---
 
-### macOS / Linux (cron)
+## 10. 트러블슈팅
 
-```cron
-0 19 * * * /path/to/goyoonjung_photo_collector/.venv/bin/python -m app.cli run >> /path/to/goyoonjung_photo_collector/cron.log 2>&1
-```
+### 10.1 `.env`가 커밋되면 안 됩니다
+- 이 저장소는 `.gitignore`로 `.env`를 제외합니다.
+- 혹시라도 `.env`가 Git에 올라갔다면 즉시 삭제 커밋 + 토큰 재발급이 필요합니다.
 
-중요:
+### 10.2 `status`는 뜨는데 이미지가 안 늘어요
+- 중복 제거가 강하게 동작해서 대부분 `DUPLICATE`로 끝날 수 있습니다.
+- `meta/failed.jsonl`, `logs/summary_YYYY-MM-DD.txt`를 먼저 확인하세요.
 
-- cron은 OS 로컬 타임존을 사용합니다.
-- KST(Asia/Seoul) 19:00에 맞추려면 서버/PC 타임존 설정을 먼저 확인하세요.
+### 10.3 `NOT_IMAGE`가 많아요
+- 제공자가 이미지 URL이 아닌 HTML/리다이렉트를 반환할 수 있습니다.
+- providers를 줄이고(예: `naver,wikimedia,instagram_seed`) 먼저 안정화하는 것을 권장합니다.
 
-## 10) 실패 처리 정책
+### 10.4 Windows에서 경로/인코딩 문제가 있어요
+- PowerShell에서 실행을 권장합니다.
+- `PHOTO_ROOT`를 명시하면 Desktop 탐지 문제를 피할 수 있습니다.
 
-접근 불가, 차단, 로그인 필요, 비이미지 등은 우회하지 않고 스킵하며 `meta/failed.jsonl`에 사유를 남깁니다.
+---
+
+## 11. 보안 체크리스트(중요)
+
+이 프로젝트를 **퍼블릭 저장소**로 운영할 때 최소한 아래를 지키세요.
+
+- [ ] `.env`는 절대 커밋하지 않기
+- [ ] API 키/토큰은 README/이슈/PR에도 복붙하지 않기
+- [ ] 로그 파일에 키가 찍히지 않는지 확인하기(필요 시 마스킹)
+- [ ] seed 파일(예: 개인 계정 URL)이 민감할 수 있으면 공개 저장소에 넣지 않기
+
+---
+
+## 라이선스
+
+필요하시면 라이선스(MIT 등)를 추가해 정리할 수 있습니다.
