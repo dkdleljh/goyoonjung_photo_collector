@@ -39,13 +39,14 @@ if [[ "$CUR_BRANCH" != "$BRANCH" ]]; then
 fi
 
 # If no changes, exit
-CHANGED="$(git status --porcelain || true)"
+# Only consider tracked changes; ignore untracked files (e.g., lock files) in unattended mode.
+CHANGED="$(git status --porcelain --untracked-files=no || true)"
 if [[ -z "$CHANGED" ]]; then
   exit 0
 fi
 
 # Extract changed file paths (both staged+unstaged)
-FILES="$(git status --porcelain | awk '{print $2}' | sed 's#^"##; s#"$##' || true)"
+FILES="$(git status --porcelain --untracked-files=no | awk '{print $2}' | sed 's#^"##; s#"$##' || true)"
 
 # If any changed file is not allowlisted, skip for safety
 while IFS= read -r f; do

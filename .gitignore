@@ -23,6 +23,11 @@ __pycache__/
 
 # OS/editor
 .DS_Store
+
+# Cron lock / local hooks
+.auto_publish.lock
+.githooks/
+
 .vscode/
 .idea/
 
