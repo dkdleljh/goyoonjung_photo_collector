@@ -68,9 +68,20 @@ def is_quality_ok(width: int, height: int, *, min_short_side_px: int) -> bool:
 
 
 class ImageDownloader:
-    def __init__(self, root: Path, dedup_store, items_logger, failed_logger, *, min_short_side_px: int = 720) -> None:
+    def __init__(
+        self,
+        root: Path,
+        dedup_store,
+        items_logger,
+        failed_logger,
+        *,
+        min_short_side_px: int = 720,
+        smart_dedup=None,
+    ) -> None:
         self.root = root
         self.dedup_store = dedup_store
+        self.smart_dedup = smart_dedup
+        self._smart_lock = asyncio.Lock() if smart_dedup is not None else None
         self.items_logger = items_logger
         self.failed_logger = failed_logger
         self.min_short_side_px = int(min_short_side_px)
@@ -201,8 +212,50 @@ class ImageDownloader:
         filename = f"{sha256_hex[:20]}{ext}"
         save_path = save_dir / filename
 
+        # Smart (perceptual) dedup: catches re-encodes/resizes of the same underlying image.
+        # If an "upgrade" is found, we keep the better one and optionally remove the old file.
+        smart_action = None
+        old_path = None
+        if self.smart_dedup is not None:
+            try:
+                async with self._smart_lock:  # type: ignore[arg-type]
+                    smart_action, old_path = self.smart_dedup.check_and_update(img, str(save_path))
+            except Exception as exc:  # noqa: BLE001
+                # Do not fail the run due to dedup errors.
+                self.failed_logger.append(
+                    {
+                        "time_kst": time_kst,
+                        "provider": cand.provider,
+                        "url": cand.url,
+                        "source_url": cand.source_url,
+                        "reason": "SMART_DEDUP_ERROR",
+                        "detail": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                smart_action = None
+
+            if smart_action == "DUPLICATE":
+                self.failed_logger.append(
+                    {
+                        "time_kst": time_kst,
+                        "provider": cand.provider,
+                        "url": cand.url,
+                        "source_url": cand.source_url,
+                        "reason": "DUPLICATE_SMART",
+                        "detail": old_path or "",
+                    }
+                )
+                return "DUPLICATE"
+
         save_path.write_bytes(data)
         self.dedup_store.add(sha256_hex, time_kst)
+
+        # If smart dedup decided this is an upgrade, best-effort remove the older inferior file.
+        if smart_action == "UPGRADE" and old_path:
+            try:
+                Path(old_path).unlink(missing_ok=True)
+            except Exception:
+                pass
 
         # Organized copies (classification shared with reorganize.py)
         from app.organize import classify
@@ -223,6 +276,8 @@ class ImageDownloader:
                 "sha256": sha256_hex,
                 "content_type": content_type,
                 "content_length": len(data),
+                "smart_dedup": smart_action,
+                "smart_dedup_old_path": old_path,
             }
         )
         return "OK"

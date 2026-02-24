@@ -24,6 +24,7 @@ from app.providers.twitter_snscrape import TwitterSnScrapeProvider
 from app.providers.twitter_rsshub import TwitterRSSHubProvider
 from app.providers.wikimedia import WikimediaProvider
 from app.time_utils import kst_date_str, kst_timestamp_str
+from app.smart_dedup import SmartDedupStore
 
 EXIT_OK = 0
 EXIT_DEGRADED = 1
@@ -69,7 +70,7 @@ def _build_provider_tasks(config: RunConfig, project_root: Path) -> list[tuple[s
     if "instagram_seed" in config.providers:
         tasks.append(("instagram_seed", InstagramSeedProvider(project_root / "seeds" / "instagram_urls.txt")))
     if "google" in config.providers:
-        tasks.append(("google", GoogleProvider(config.keywords, max_pages=1)))
+        tasks.append(("google", GoogleProvider(config.keywords, max_pages=config.google_max_pages)))
     if "twitter_rss" in config.providers:
         tasks.append(("twitter_rss", TwitterRSSProvider()))
     if "twitter_snscrape" in config.providers:
@@ -187,6 +188,7 @@ async def run_once(config: RunConfig, project_root: Path) -> RunReport:
     items_logger = JsonlLogger(root / "meta" / "items.jsonl")
     failed_logger = MetricsFailedLogger(JsonlLogger(root / "meta" / "failed.jsonl"))
     dedup_store = DedupStore(root / "meta" / "dedup.sqlite")
+    smart_dedup = SmartDedupStore(str(root / "meta" / "smart_dedup.pkl"))
 
     candidates: list[Candidate] = []
 
@@ -226,6 +228,7 @@ async def run_once(config: RunConfig, project_root: Path) -> RunReport:
             downloader = ImageDownloader(
                 root=root,
                 dedup_store=dedup_store,
+                smart_dedup=smart_dedup,
                 items_logger=items_logger,
                 failed_logger=failed_logger,
                 min_short_side_px=config.min_short_side_px,
@@ -237,6 +240,11 @@ async def run_once(config: RunConfig, project_root: Path) -> RunReport:
             )
 
     dedup_store.close()
+    # smart_dedup uses pickle; save is called on updates, but keep a final best-effort save.
+    try:
+        smart_dedup.save()
+    except Exception:
+        pass
 
     # Attach config into counts for status/debug (kept simple & backward compatible)
     counts["_min_short_side_px"] = int(config.min_short_side_px)

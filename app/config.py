@@ -6,7 +6,9 @@ RELIABLE_DEFAULT_PROVIDERS = ["naver", "wikimedia", "instagram_seed"]
 EXPERIMENTAL_PROVIDERS = ["google", "twitter_rss", "twitter_snscrape", "twitter_rsshub"]
 ALL_PROVIDERS = [*RELIABLE_DEFAULT_PROVIDERS, *EXPERIMENTAL_PROVIDERS]
 
-DEFAULT_PROVIDERS = RELIABLE_DEFAULT_PROVIDERS
+# A-mode default: broaden coverage by including google best-effort.
+# (May produce more DOWNLOAD_FAIL due to blocking; still useful for discovery.)
+DEFAULT_PROVIDERS = [*RELIABLE_DEFAULT_PROVIDERS, "google"]
 DEFAULT_KEYWORDS = ["고윤정", "Go Yoonjung", "고윤정 화보", "고윤정 직찍"]
 
 
@@ -22,5 +24,8 @@ class RunConfig:
     # Naver
     naver_display: int = 50
     naver_pages: int = 3
+
+    # Google (best-effort)
+    google_max_pages: int = 1
 
     dry_run: bool = False
