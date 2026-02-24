@@ -33,10 +33,20 @@ async def request_with_retry(
             await asyncio.sleep(random.uniform(0.8, 1.6))
         try:
             response = await client.request(method, url, **kwargs)
-            if response.status_code >= 500:
+
+            # Retry on server errors and common throttling responses.
+            if response.status_code >= 500 or response.status_code in {429, 408}:
                 raise httpx.HTTPStatusError(
-                    f"server error: {response.status_code}", request=response.request, response=response
+                    f"retryable http error: {response.status_code}", request=response.request, response=response
                 )
+
+            # For 403, do NOT attempt to bypass; but transient blocks can happen.
+            # Retry a little, then give up.
+            if response.status_code == 403 and attempt < retries:
+                raise httpx.HTTPStatusError(
+                    f"transient forbidden: {response.status_code}", request=response.request, response=response
+                )
+
             return response
         except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError, httpx.HTTPStatusError) as exc:
             last_exc = exc

@@ -18,14 +18,15 @@ class RunConfig:
     keywords: list[str] = field(default_factory=lambda: list(DEFAULT_KEYWORDS))
 
     # Downloader
+    # Keep workers moderate to avoid bursts / rate limiting.
     max_workers: int = 5
     min_short_side_px: int = 720  # default: 720p quality gate
 
     # Naver
     naver_display: int = 50
-    naver_pages: int = 3
+    naver_pages: int = 5
 
     # Google (best-effort)
-    google_max_pages: int = 1
+    google_max_pages: int = 2
 
     dry_run: bool = False
