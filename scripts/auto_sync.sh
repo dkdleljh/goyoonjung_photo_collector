@@ -9,9 +9,13 @@ if git remote >/dev/null 2>&1 && [ -n "$(git remote)" ]; then
   git pull --rebase --autostash || true
 fi
 
-# Basic secret scan (best-effort)
+# Basic secret scan (best-effort). Scan only files Git would actually sync,
+# and avoid matching this script's own regex.
 if command -v rg >/dev/null 2>&1; then
-  if rg -n "(BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}|gho_[A-Za-z0-9]{20,})" -S --hidden --glob '!.git/**' --glob '!venv/**' --glob '!node_modules/**' >/dev/null 2>&1; then
+  scan_files="$(mktemp)"
+  trap 'rm -f "$scan_files"' EXIT
+  git ls-files -co --exclude-standard | rg -v '^(scripts/auto_sync\.sh|.*\.env\.example)$' >"$scan_files" || true
+  if [ -s "$scan_files" ] && xargs -r -d '\n' rg -n "(BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}|gho_[A-Za-z0-9]{20,})" -S --hidden <"$scan_files" >/dev/null 2>&1; then
     echo "[auto_sync] ERROR: potential secret detected" >&2
     exit 3
   fi
