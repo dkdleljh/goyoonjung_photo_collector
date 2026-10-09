@@ -57,3 +57,11 @@ python -m app.cli status
 
 - `.env`는 절대 커밋 금지
 - 로그/seed 파일에 민감정보가 섞이지 않도록 주의
+
+<!-- BEGIN RELEASE STATUS -->
+## 최신 배포 정보
+
+- 저장소 버전: `v2026.10.10.1`
+- [변경사항과 검증 범위](RELEASE_NOTES.md)
+- [GitHub 릴리즈](https://github.com/dkdleljh/goyoonjung_photo_collector/releases/latest)
+<!-- END RELEASE STATUS -->
